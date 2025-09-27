@@ -3,6 +3,7 @@ import { ConfigModule } from '@nestjs/config';
 import { MongooseModule } from '@nestjs/mongoose';
 import { mongooseConfig } from './config/mongooseConfig';
 import { CategoryModule } from './category/category.module';
+import { TransactionModule } from './transaction/transaction.module';
 
 @Module({
   imports: [
@@ -10,7 +11,8 @@ import { CategoryModule } from './category/category.module';
     MongooseModule.forRootAsync(
       mongooseConfig,
     ),
-    CategoryModule
+    CategoryModule,
+    TransactionModule
   ],
   controllers: [],
   providers: [],

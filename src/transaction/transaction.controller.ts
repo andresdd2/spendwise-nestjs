@@ -18,13 +18,31 @@ export class TransactionController {
     return this.transactionService.findAll();
   }
 
+  @Get('totals')
+  getTotals() {
+    return this.transactionService.getTotals();
+  }
+
+  @Get('expenses/by-category')
+  getTotalExpensesByCategory() {
+    return this.transactionService.getTotalExpensesByCategory();
+  }
+
+  @Get('incomes/by-category')
+  getTotalIncomesByCategory() {
+    return this.transactionService.getTotalIncomesByCategory();
+  }
+
   @Get(':id')
   findOne(@Param('id', ObjectIdValidationPipe) id: string) {
     return this.transactionService.findOne(id);
   }
 
   @Patch(':id')
-  update(@Param('id', ObjectIdValidationPipe) id: string, @Body() updateTransactionDto: UpdateTransactionDto) {
+  update(
+    @Param('id', ObjectIdValidationPipe) id: string,
+    @Body() updateTransactionDto: UpdateTransactionDto,
+  ) {
     return this.transactionService.update(id, updateTransactionDto);
   }
 

@@ -14,7 +14,6 @@ export class TransactionService {
   ) {}
 
   async create(createTransactionDto: CreateTransactionDto) {
-
     const payload: Partial<Transaction> = {
       amount: parseInt(createTransactionDto.amount, 10),
       description: createTransactionDto.description,
@@ -31,7 +30,7 @@ export class TransactionService {
 
     const transaction = await this.transactionModel.create(payload);
 
-    const message = this.transactionMessage(transaction.type, 'registrado')
+    const message = this.transactionMessage(transaction.type, 'registrado');
 
     return { message };
   }
@@ -67,7 +66,7 @@ export class TransactionService {
       });
     }
 
-    const message = this.transactionMessage(transaction.type, 'actualizado')
+    const message = this.transactionMessage(transaction.type, 'actualizado');
 
     return { message };
   }
@@ -81,16 +80,131 @@ export class TransactionService {
       });
     }
 
-    return { message: 'La transacción ha sido eliminada.'};
+    return { message: 'La transacción ha sido eliminada.' };
   }
 
-  private transactionMessage(transactionType: TransactionType, action: string): string {
+  async getTotals() {
+    const totals = await this.transactionModel.aggregate([
+      {
+        $group: {
+          _id: '$type',
+          totalAmount: { $sum: '$amount' },
+        },
+      },
+    ]);
+
+    const result = {
+      income: 0,
+      expense: 0,
+    };
+
+    totals.forEach((item) => {
+      if (item._id === TransactionType.INCOME) {
+        result.income = item.totalAmount;
+      } else if (item._id === TransactionType.EXPENSE) {
+        result.expense = item.totalAmount;
+      }
+    });
+
+    return {
+      data: result,
+    };
+  }
+
+  async getTotalExpensesByCategory() {
+    const expenses = await this.transactionModel.aggregate([
+      {
+        $match: { type: TransactionType.EXPENSE },
+      },
+      {
+        $group: {
+          _id: '$category',
+          totalAmount: { $sum: '$amount' },
+          transactionCount: { $sum: 1 },
+        },
+      },
+      {
+        $lookup: {
+          from: 'categories',
+          localField: '_id',
+          foreignField: '_id',
+          as: 'categoryInfo',
+        },
+      },
+      {
+        $unwind: '$categoryInfo',
+      },
+      {
+        $project: {
+          _id: 0,
+          categoryId: '$_id',
+          categoryName: '$categoryInfo.name',
+          totalAmount: 1,
+          transactionCount: 1,
+        },
+      },
+      {
+        $sort: { totalAmount: -1 },
+      },
+    ]);
+
+    return {
+      data: expenses,
+    };
+  }
+
+  async getTotalIncomesByCategory() {
+    const incomes = await this.transactionModel.aggregate([
+      {
+        $match: { type: TransactionType.INCOME },
+      },
+      {
+        $group: {
+          _id: '$category',
+          totalAmount: { $sum: '$amount' },
+          transactionCount: { $sum: 1 },
+        },
+      },
+      {
+        $lookup: {
+          from: 'categories',
+          localField: '_id',
+          foreignField: '_id',
+          as: 'categoryInfo',
+        },
+      },
+      {
+        $unwind: '$categoryInfo',
+      },
+      {
+        $project: {
+          _id: 0,
+          categoryId: '$_id',
+          categoryName: '$categoryInfo.name',
+          totalAmount: 1,
+          transactionCount: 1,
+        },
+      },
+      {
+        $sort: { totalAmount: -1 },
+      },
+    ]);
+
+    return {
+      data: incomes,
+    };
+  }
+
+  private transactionMessage(
+    transactionType: TransactionType,
+    action: string,
+  ): string {
     let baseType: string;
 
-    if( transactionType === 'income' ) {
-      baseType = 'Ingreso'
+    if (transactionType === 'income') {
+      baseType = 'Ingreso';
     } else {
-      baseType = 'Gasto'
+      baseType = 'Gasto';
     }
     return `${baseType} ${action} exitosamente.`;
   }

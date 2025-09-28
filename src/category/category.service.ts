@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { ConflictException, Injectable, InternalServerErrorException, NotFoundException } from '@nestjs/common';
 import { CreateCategoryDto } from './dto/create-category.dto';
 import { UpdateCategoryDto } from './dto/update-category.dto';
 import { Category } from './entities/category.entity';
@@ -14,8 +14,19 @@ export class CategoryService {
   ) {}
 
   async create(createCategoryDto: CreateCategoryDto) {
-    const category = await this.categoryModel.create(createCategoryDto);
-    return { message: 'Categoría creada exitosamente.'};
+    try {
+      const categoryData: Partial<Category> = {
+        name: createCategoryDto.name.toLowerCase()
+      };
+
+      await this.categoryModel.create(categoryData);
+      return { message: 'Categoría creada exitosamente.'}
+    } catch (error) {
+      if ( error.code == 11000 ) {
+        throw new ConflictException({ message: 'La categoría ya existe en la base de datos.'});
+      }
+      throw new InternalServerErrorException({ message: 'No se pudo crear la categoría.'});
+    }
   }
 
   async findAll() {
@@ -32,11 +43,24 @@ export class CategoryService {
   }
 
   async update(id: string, updateCategoryDto: UpdateCategoryDto) {
-    const category = await this.categoryModel.findByIdAndUpdate(id, updateCategoryDto, { new: true });
-    if (!category) {
-      throw new NotFoundException({ message: `El id ${id} no existe.` });
+    try {
+      const updateData: Partial<Category> = updateCategoryDto.name ? {
+        name: updateCategoryDto.name.toLowerCase()
+      } : {};
+
+      const category = await this.categoryModel.findByIdAndUpdate(id, updateData, { new: true });
+
+      if ( !category ) {
+        throw new NotFoundException({ message: `El id ${id} no existe.`})
+      }
+
+      return { message: 'La categoría ha sido actualizada.'}
+    } catch (error) {
+      if ( error.code == 11000 ) {
+        throw new ConflictException({ message: 'Ya existe una categoría con ese nombre.'})
+      }
+      throw new InternalServerErrorException({ message: 'No se pudo actualizar la categoría.'});
     }
-    return { message: 'La categoría ha sido actualizada.'};
   }
 
   async remove(id: string) {

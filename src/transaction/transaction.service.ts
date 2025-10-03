@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { CreateTransactionDto } from './dto/create-transaction.dto';
 import { UpdateTransactionDto } from './dto/update-transaction.dto';
 import { InjectModel } from '@nestjs/mongoose';
@@ -83,8 +83,22 @@ export class TransactionService {
     return { message: 'La transacción ha sido eliminada.' };
   }
 
-  async getTotals() {
+  async getTotals(year?: number, month?: number) {
+    let matchStage = {};
+
+    if (year && month) {
+      const startDate = new Date(year, month - 1, 1);
+      const endDate = new Date(year, month, 1);
+      matchStage = {
+        date: {
+          $gte: startDate,
+          $lt: endDate,
+        },
+      };
+    }
+
     const totals = await this.transactionModel.aggregate([
+      { $match: matchStage },
       {
         $group: {
           _id: '$type',
@@ -111,16 +125,49 @@ export class TransactionService {
     };
   }
 
-  async getTotalExpensesByCategory() {
-    const expenses = await this.transactionModel.aggregate([
-      {
-        $match: { type: TransactionType.EXPENSE },
-      },
+  async getTotalsByCategory(year?: number, month?: number) {
+    let matchStage = {};
+
+    if (year && month) {
+      const startDate = new Date(year, month - 1, 1);
+      const endDate = new Date(year, month, 1);
+      matchStage = {
+        date: {
+          $gte: startDate,
+          $lt: endDate,
+        },
+      };
+    }
+
+    const results = await this.transactionModel.aggregate([
+      { $match: matchStage },
       {
         $group: {
           _id: '$category',
-          totalAmount: { $sum: '$amount' },
-          transactionCount: { $sum: 1 },
+          totalIncome: {
+            $sum: {
+              $cond: [{ $eq: ['$type', TransactionType.INCOME] }, '$amount', 0],
+            },
+          },
+          totalExpense: {
+            $sum: {
+              $cond: [
+                { $eq: ['$type', TransactionType.EXPENSE] },
+                '$amount',
+                0,
+              ],
+            },
+          },
+          incomeCount: {
+            $sum: {
+              $cond: [{ $eq: ['$type', TransactionType.INCOME] }, 1, 0],
+            },
+          },
+          expenseCount: {
+            $sum: {
+              $cond: [{ $eq: ['$type', TransactionType.EXPENSE] }, 1, 0],
+            },
+          },
         },
       },
       {
@@ -131,68 +178,153 @@ export class TransactionService {
           as: 'categoryInfo',
         },
       },
+      { $unwind: '$categoryInfo' },
       {
-        $unwind: '$categoryInfo',
+        $addFields: {
+          total: { $add: ['$totalIncome', '$totalExpense'] },
+        },
+      },
+      {
+        $sort: {
+          total: -1,
+        },
       },
       {
         $project: {
           _id: 0,
           categoryId: '$_id',
           categoryName: '$categoryInfo.name',
-          totalAmount: 1,
-          transactionCount: 1,
+          totalIncome: 1,
+          totalExpense: 1,
+          incomeCount: 1,
+          expenseCount: 1,
         },
-      },
-      {
-        $sort: { totalAmount: -1 },
       },
     ]);
 
     return {
-      data: expenses,
+      data: results,
     };
   }
 
-  async getTotalIncomesByCategory() {
-    const incomes = await this.transactionModel.aggregate([
+  async getMonthlyTransactions(year: number, month: number) {
+    if (!year || !month) {
+      throw new BadRequestException(
+        'El año y el mes son requeridos para obtener las transacciones mensuales.',
+      );
+    }
+
+    const startDate = new Date(year, month - 1, 1);
+    const endDate = new Date(year, month, 1);
+
+    return await this.transactionModel
+      .find({
+        date: {
+          $gte: startDate,
+          $lt: endDate,
+        },
+      })
+      .populate('category')
+      .sort({ date: -1 });
+  }
+
+  async getMonthlyTotals(year: number = new Date().getFullYear()) {
+    const startDate = new Date(year, 0, 1);
+    const endDate = new Date(year + 1, 0, 1);
+
+    const aggregates = await this.transactionModel.aggregate([
       {
-        $match: { type: TransactionType.INCOME },
+        $match: {
+          date: {
+            $gte: startDate,
+            $lt: endDate,
+          },
+        },
       },
       {
         $group: {
-          _id: '$category',
+          _id: {
+            month: { $month: '$date' },
+            type: '$type',
+          },
           totalAmount: { $sum: '$amount' },
-          transactionCount: { $sum: 1 },
         },
       },
       {
-        $lookup: {
-          from: 'categories',
-          localField: '_id',
-          foreignField: '_id',
-          as: 'categoryInfo',
-        },
-      },
-      {
-        $unwind: '$categoryInfo',
-      },
-      {
-        $project: {
-          _id: 0,
-          categoryId: '$_id',
-          categoryName: '$categoryInfo.name',
-          totalAmount: 1,
-          transactionCount: 1,
-        },
-      },
-      {
-        $sort: { totalAmount: -1 },
+        $sort: { '_id.month': 1 },
       },
     ]);
 
-    return {
-      data: incomes,
-    };
+    const results = Array.from({ length: 12 }, (_, i) => ({
+      month: i + 1,
+      income: 0,
+      expense: 0,
+    }));
+
+    aggregates.forEach((item) => {
+      const monthIndex = item._id.month - 1;
+      if (item._id.type === TransactionType.INCOME) {
+        results[monthIndex].income = item.totalAmount;
+      } else if (item._id.type === TransactionType.EXPENSE) {
+        results[monthIndex].expense = item.totalAmount;
+      }
+    });
+
+    return { data: results };
+  }
+
+  async getDailyTotals(year: number, month: number) {
+    if (!year || !month) {
+      throw new BadRequestException(
+        'El año y el mes son requeridos para obtener los totales diarios.',
+      );
+    }
+
+    const startDate = new Date(year, month - 1, 1);
+    const endDate = new Date(year, month, 1);
+    const daysInMonth = new Date(year, month, 0).getDate();
+
+    const aggregates = await this.transactionModel.aggregate([
+      {
+        $match: {
+          date: {
+            $gte: startDate,
+            $lt: endDate,
+          },
+        },
+      },
+      {
+        $group: {
+          _id: {
+            day: { $dayOfMonth: '$date' },
+            type: '$type',
+          },
+          totalAmount: { $sum: '$amount' },
+        },
+      },
+      {
+        $sort: { '_id.day': 1 },
+      },
+    ]);
+
+    const results = Array.from({ length: daysInMonth }, (_, i) => ({
+      day: i + 1,
+      income: 0,
+      expense: 0,
+    }));
+
+    aggregates.forEach((item) => {
+      const dayIndex = item._id.day - 1;
+      if (dayIndex >= 0 && dayIndex < daysInMonth) {
+        if (item._id.type === TransactionType.INCOME) {
+          results[dayIndex].income = item.totalAmount;
+        } else if (item._id.type === TransactionType.EXPENSE) {
+          results[dayIndex].expense = item.totalAmount;
+        }
+      }
+    });
+
+    return { data: results };
   }
 
   private transactionMessage(

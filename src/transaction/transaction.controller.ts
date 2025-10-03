@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete } from '@nestjs/common';
+import { Controller, Get, Post, Body, Patch, Param, Delete, Query } from '@nestjs/common';
 import { TransactionService } from './transaction.service';
 import { CreateTransactionDto } from './dto/create-transaction.dto';
 import { UpdateTransactionDto } from './dto/update-transaction.dto';
@@ -19,18 +19,45 @@ export class TransactionController {
   }
 
   @Get('totals')
-  getTotals() {
-    return this.transactionService.getTotals();
+  getTotals(@Query('year') year: string, @Query('month') month: string) {
+    return this.transactionService.getTotals(
+      year ? parseInt(year, 10) : undefined,
+      month ? parseInt(month, 10) : undefined,
+    );
   }
 
-  @Get('expenses/by-category')
-  getTotalExpensesByCategory() {
-    return this.transactionService.getTotalExpensesByCategory();
+  @Get('totals/by-category')
+  getTotalsByCategory(
+    @Query('year') year: string,
+    @Query('month') month: string,
+  ) {
+    return this.transactionService.getTotalsByCategory(
+      year ? parseInt(year, 10) : undefined,
+      month ? parseInt(month, 10) : undefined,
+    );
   }
 
-  @Get('incomes/by-category')
-  getTotalIncomesByCategory() {
-    return this.transactionService.getTotalIncomesByCategory();
+  @Get('monthly')
+  getMonthlyTransactions( @Query('year') year: string, @Query('month') month: string ) {
+    return this.transactionService.getMonthlyTransactions(
+      parseInt(year, 10),
+      parseInt(month, 10),
+    );
+  }
+
+  @Get('totals/monthly')
+  getMonthlyTotals(@Query('year') year: string) {
+    return this.transactionService.getMonthlyTotals(
+      year ? parseInt(year, 10) : undefined,
+    );
+  }
+
+  @Get('totals/daily')
+  getDailyTotals(@Query('year') year: string, @Query('month') month: string) {
+    return this.transactionService.getDailyTotals(
+      parseInt(year, 10),
+      parseInt(month, 10),
+    );
   }
 
   @Get(':id')

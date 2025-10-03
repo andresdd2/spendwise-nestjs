@@ -200,7 +200,7 @@ export class TransactionService {
       },
     ]);
 
-    return [results];
+    return results;
   }
 
   async getMonthlyTransactions(year: number, month: number) {
@@ -266,7 +266,7 @@ export class TransactionService {
       }
     });
 
-    return [results];
+    return results;
   }
 
   async getDailyTotals(year: number, month: number) {
@@ -320,7 +320,7 @@ export class TransactionService {
       }
     });
 
-    return [results];
+    return results;
   }
 
   private transactionMessage(

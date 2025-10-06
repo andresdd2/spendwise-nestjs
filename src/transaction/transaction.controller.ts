@@ -14,8 +14,10 @@ export class TransactionController {
   }
 
   @Get()
-  findAll() {
-    return this.transactionService.findAll();
+  findAll(@Query('limit') limit?: string) {
+    return this.transactionService.findAll(
+      limit ? parseInt(limit, 10) : undefined,
+    );
   }
 
   @Get('totals')
@@ -38,7 +40,10 @@ export class TransactionController {
   }
 
   @Get('monthly')
-  getMonthlyTransactions( @Query('year') year: string, @Query('month') month: string ) {
+  getMonthlyTransactions(
+    @Query('year') year: string,
+    @Query('month') month: string,
+  ) {
     return this.transactionService.getMonthlyTransactions(
       parseInt(year, 10),
       parseInt(month, 10),

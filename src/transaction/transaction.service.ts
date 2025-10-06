@@ -1,16 +1,23 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { CreateTransactionDto } from './dto/create-transaction.dto';
 import { UpdateTransactionDto } from './dto/update-transaction.dto';
 import { InjectModel } from '@nestjs/mongoose';
 import { Transaction } from './entities/transaction.entity';
 import { Model, Types } from 'mongoose';
 import { TransactionType } from './entities/transaction_type.enum';
+import { Category } from 'src/category/entities/category.entity';
 
 @Injectable()
 export class TransactionService {
   constructor(
     @InjectModel(Transaction.name)
     private readonly transactionModel: Model<Transaction>,
+    @InjectModel('Category')
+    private readonly categoryModel: Model<Category>,
   ) {}
 
   async create(createTransactionDto: CreateTransactionDto) {
@@ -35,8 +42,15 @@ export class TransactionService {
     return { message };
   }
 
-  async findAll() {
-    return await this.transactionModel.find().populate('category');
+  async findAll(limit?: number) {
+    const query = this.transactionModel
+      .find()
+      .populate('category')
+      .sort({ date: -1 });
+    if (limit && limit > 0) {
+      query.limit(limit);
+    }
+    return await query.exec();
   }
 
   async findOne(id: string) {
@@ -124,7 +138,7 @@ export class TransactionService {
   }
 
   async getTotalsByCategory(year?: number, month?: number) {
-    let matchStage = {};
+    let matchStage: any = {};
 
     if (year && month) {
       const startDate = new Date(year, month - 1, 1);
@@ -137,65 +151,82 @@ export class TransactionService {
       };
     }
 
-    const results = await this.transactionModel.aggregate([
-      { $match: matchStage },
-      {
-        $group: {
-          _id: '$category',
-          totalIncome: {
-            $sum: {
-              $cond: [{ $eq: ['$type', TransactionType.INCOME] }, '$amount', 0],
-            },
-          },
-          totalExpense: {
-            $sum: {
-              $cond: [
-                { $eq: ['$type', TransactionType.EXPENSE] },
-                '$amount',
-                0,
-              ],
-            },
-          },
-          incomeCount: {
-            $sum: {
-              $cond: [{ $eq: ['$type', TransactionType.INCOME] }, 1, 0],
-            },
-          },
-          expenseCount: {
-            $sum: {
-              $cond: [{ $eq: ['$type', TransactionType.EXPENSE] }, 1, 0],
-            },
-          },
-        },
-      },
+    const results = await this.categoryModel.aggregate([
       {
         $lookup: {
-          from: 'categories',
-          localField: '_id',
-          foreignField: '_id',
-          as: 'categoryInfo',
+          from: 'transactions',
+          let: { categoryId: '$_id' },
+          pipeline: [
+            { $match: { $expr: { $eq: ['$category', '$$categoryId'] } } },
+            { $match: matchStage },
+            {
+              $group: {
+                _id: null,
+                totalIncome: {
+                  $sum: {
+                    $cond: [
+                      { $eq: ['$type', TransactionType.INCOME] },
+                      '$amount',
+                      0,
+                    ],
+                  },
+                },
+                totalExpense: {
+                  $sum: {
+                    $cond: [
+                      { $eq: ['$type', TransactionType.EXPENSE] },
+                      '$amount',
+                      0,
+                    ],
+                  },
+                },
+                incomeCount: {
+                  $sum: {
+                    $cond: [{ $eq: ['$type', TransactionType.INCOME] }, 1, 0],
+                  },
+                },
+                expenseCount: {
+                  $sum: {
+                    $cond: [{ $eq: ['$type', TransactionType.EXPENSE] }, 1, 0],
+                  },
+                },
+              },
+            },
+          ],
+          as: 'transactionData',
         },
       },
-      { $unwind: '$categoryInfo' },
+
       {
-        $addFields: {
-          total: { $add: ['$totalIncome', '$totalExpense'] },
+        $unwind: {
+          path: '$transactionData',
+          preserveNullAndEmptyArrays: true,
         },
       },
-      {
-        $sort: {
-          total: -1,
-        },
-      },
+
       {
         $project: {
-          _id: 0,
           categoryId: '$_id',
-          categoryName: '$categoryInfo.name',
-          totalIncome: 1,
-          totalExpense: 1,
-          incomeCount: 1,
-          expenseCount: 1,
+          categoryName: '$name',
+          totalIncome: {
+            $ifNull: ['$transactionData.totalIncome', 0],
+          },
+          totalExpense: {
+            $ifNull: ['$transactionData.totalExpense', 0],
+          },
+          incomeCount: {
+            $ifNull: ['$transactionData.incomeCount', 0],
+          },
+          expenseCount: {
+            $ifNull: ['$transactionData.expenseCount', 0],
+          },
+          _id: 0,
+        },
+      },
+
+      {
+        $sort: {
+          categoryName: 1,
         },
       },
     ]);

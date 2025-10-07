@@ -42,14 +42,36 @@ export class TransactionService {
     return { message };
   }
 
-  async findAll(limit?: number) {
+  async findAll(limit?: number, startDate?: string, endDate?: string) {
+    const filter: any = {};
+
+    if (startDate || endDate) {
+      filter.date = {};
+      if (startDate) {
+        filter.date.$gte = new Date(
+          /^\d{4}-\d{2}-\d{2}$/.test(startDate)
+            ? `${startDate}T00:00:00.000Z`
+            : startDate,
+        );
+      }
+      if (endDate) {
+        filter.date.$lte = new Date(
+          /^\d{4}-\d{2}-\d{2}$/.test(endDate)
+            ? `${endDate}T23:59:59.999Z`
+            : endDate,
+        );
+      }
+    }
+
     const query = this.transactionModel
-      .find()
+      .find(filter)
       .populate('category')
       .sort({ date: -1 });
+
     if (limit && limit > 0) {
       query.limit(limit);
     }
+
     return await query.exec();
   }
 

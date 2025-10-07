@@ -14,9 +14,15 @@ export class TransactionController {
   }
 
   @Get()
-  findAll(@Query('limit') limit?: string) {
+  findAll(
+    @Query('limit') limit?: string,
+    @Query('startDate') startDate?: string,
+    @Query('endDate') endDate?: string,
+  ) {
     return this.transactionService.findAll(
       limit ? parseInt(limit, 10) : undefined,
+      startDate,
+      endDate,
     );
   }
 
